@@ -753,17 +753,24 @@ async def handle_index(request):
         }};
         
         function appendLine(text) {{
-            terminal.textContent += text + '\n';
+            const safeText = String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            terminal.innerHTML += safeText + '<br>';
             terminal.scrollTop = terminal.scrollHeight;
         }}
         
         function sendCmd(action) {{
-            ws.send(JSON.stringify({{action: action}}));
+            if (ws.readyState === WebSocket.OPEN) {{
+                ws.send(JSON.stringify({{action: action}}));
+            }} else {{
+                status.innerHTML = '<span class="disconnected">● WebSocket not connected</span>';
+            }}
         }}
         
         function setBaud() {{
             const rate = document.getElementById('baud').value;
-            ws.send(JSON.stringify({{action: 'set_baud', rate: parseInt(rate)}}));
+            if (ws.readyState === WebSocket.OPEN) {{
+                ws.send(JSON.stringify({{action: 'set_baud', rate: parseInt(rate)}}));
+            }}
         }}
     </script>
 </body>
