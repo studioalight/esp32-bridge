@@ -27,6 +27,11 @@ WebSocket Commands:
     {"action": "status"}                       # Get status
     {"action": "flash", "file": "firmware.bin", "addr": "0x10000"}
     {"action": "set_baud", "rate": 460800}   # Change baud rate
+    {"action": "get_chip"}                   # Get current chip type
+    {"action": "set_chip", "chip": "esp32p4"} # Set chip type (auto-detected)
+
+Supported chips:
+    esp32, esp32s2, esp32s3, esp32c3, esp32c6, esp32h2, esp32p4
 
 HTTP Endpoints:
     POST /upload         - Upload firmware file
@@ -89,6 +94,7 @@ STATE = {
     'connected': False,
     'port': None,
     'baudrate': 460800,
+    'chip': 'esp32p4',
     'bytes_received': 0,
     'lines_received': 0,
     'last_activity': None,
@@ -518,6 +524,7 @@ async def handle_ws(websocket):
                 elif action == 'flash':
                     filename = data.get('file')
                     address = data.get('addr', '0x10000')
+                    chip = data.get('chip', STATE['chip'])
                     
                     if not filename:
                         await websocket.send(json.dumps({'type': 'error', 'message': 'No file specified'}))
@@ -533,11 +540,11 @@ async def handle_ws(websocket):
                     
                     await websocket.send(json.dumps({
                         'type': 'system',
-                        'message': f"Flashing {filename} to {address}"
+                        'message': f"Flashing {filename} to {address} (chip: {chip})"
                     }))
                     
                     if port and not port.startswith('/dev/tty'):
-                        await flash_firmware(filepath, address, port, baudrate, config['flash']['default_chip'])
+                        await flash_firmware(filepath, address, port, baudrate, chip)
                     else:
                         await websocket.send(json.dumps({
                             'type': 'error',
@@ -550,6 +557,7 @@ async def handle_ws(websocket):
                         'connected': STATE['connected'],
                         'port': STATE['port'],
                         'baudrate': STATE['baudrate'],
+                        'chip': STATE['chip'],
                         'bytes_received': STATE['bytes_received'],
                         'lines_received': STATE['lines_received']
                     }))
@@ -571,6 +579,32 @@ async def handle_ws(websocket):
                         'type': 'config',
                         'config': config
                     }))
+                
+                elif action == 'get_chip':
+                    await websocket.send(json.dumps({
+                        'type': 'chip',
+                        'chip': STATE['chip'],
+                        'supported': ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c6', 'esp32h2', 'esp32p4']
+                    }))
+                
+                elif action == 'set_chip':
+                    new_chip = data.get('chip')
+                    supported = ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c6', 'esp32h2', 'esp32p4']
+                    if new_chip and new_chip in supported:
+                        STATE['chip'] = new_chip
+                        config['flash']['default_chip'] = new_chip
+                        if config_path:
+                            save_config(config_path, config)
+                        log(f"Chip set to: {new_chip}", 'CONFIG')
+                        await websocket.send(json.dumps({
+                            'type': 'system',
+                            'message': f"Chip changed to {new_chip}"
+                        }))
+                    else:
+                        await websocket.send(json.dumps({
+                            'type': 'error',
+                            'message': f"Invalid chip. Supported: {', '.join(supported)}"
+                        }))
                 
                 else:
                     await websocket.send(json.dumps({
@@ -774,6 +808,9 @@ async def main():
     parser.add_argument('--config', '-c', help='Config file path')
     parser.add_argument('--port', '-p', help='Serial port (auto-detect if not specified)')
     parser.add_argument('--baud', '-b', type=int, default=460800, help='Baud rate (default: 460800)')
+    parser.add_argument('--chip', type=str, default='esp32p4', 
+                       choices=['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c6', 'esp32h2', 'esp32p4'],
+                       help='Default chip type (default: esp32p4)')
     parser.add_argument('--http-port', type=int, default=5679, help='HTTP port')
     parser.add_argument('--ws-port', type=int, default=5678, help='WebSocket port')
     parser.add_argument('--auto', action='store_true', help='Auto-detect and run')
@@ -789,12 +826,15 @@ async def main():
         config['serial']['baudrate'] = args.baud
     if args.port:
         config['serial']['port'] = args.port
+    if args.chip:
+        config['flash']['default_chip'] = args.chip
     if args.http_port:
         config['network']['http_port'] = args.http_port
     if args.ws_port:
         config['network']['ws_port'] = args.ws_port
     
     STATE['baudrate'] = config['serial']['baudrate']
+    STATE['chip'] = config['flash']['default_chip']
     
     # Save config if requested
     if args.save_config:
@@ -802,6 +842,7 @@ async def main():
     
     log(f"ESP32 Bridge v2.0 starting...", 'START')
     log(f"Baud rate: {config['serial']['baudrate']}", 'CONFIG')
+    log(f"Default chip: {config['flash']['default_chip']}", 'CONFIG')
     log(f"Upload dir: {config['uploads']['directory']}", 'CONFIG')
     
     # Start services
