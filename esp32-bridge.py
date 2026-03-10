@@ -459,7 +459,7 @@ async def read_serial(config):
                                 STATE['lines_received'] += 1
                                 STATE['bytes_received'] += len(line)
                                 STATE['last_activity'] = time.time()
-                                await broadcast(line)
+                                await broadcast(json.dumps({'type': 'serial', 'text': line}))
                     
                     await asyncio.sleep(0.01)
                     
@@ -806,6 +806,15 @@ async def handle_index(request):
                 ws.send(JSON.stringify({{action: 'set_baud', rate: parseInt(rate)}}));
             }}
         }}
+        
+        // Echo toggle with 'e' key (like old bridge)
+        let echoEnabled = true;
+        document.addEventListener('keydown', (e) => {{
+            if (e.key === 'e' || e.key === 'E') {{
+                echoEnabled = !echoEnabled;
+                appendLine('[CONFIG] Echo ' + (echoEnabled ? 'enabled' : 'disabled'));
+            }}
+        }});
     </script>
 </body>
 </html>
