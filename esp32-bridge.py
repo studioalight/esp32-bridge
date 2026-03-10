@@ -54,9 +54,11 @@ import time
 import os
 import subprocess
 import yaml
+import ssl
 from datetime import datetime
 from pathlib import Path
 from aiohttp import web
+import tempfile
 
 # Default configuration
 DEFAULT_CONFIG = {
@@ -741,14 +743,9 @@ async def handle_index(request):
         // Server-injected host: {host}
         const wsHost = window.location.hostname || '{host}';
         
-        // Show HTTPS notice if applicable
-        if (window.location.protocol === 'https:') {
-            document.getElementById('https-notice').style.display = 'block';
-            status.innerHTML = '<span class="disconnected">● HTTPS Mode - WebSocket Unavailable</span>';
-        }
-        
-        // Use ws:// for WebSocket (plain TCP)
-        const wsUrl = 'ws://' + wsHost + ':5678/ws';
+        // Use same scheme as page (wss for https, ws for http)
+        const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsUrl = wsScheme + '://' + wsHost + ':5678/ws';
         console.log('WebSocket URL:', wsUrl);
         const ws = new WebSocket(wsUrl);
         const terminal = document.getElementById('terminal');
@@ -833,6 +830,36 @@ async def start_http(config):
     return runner
 
 
+def generate_ssl_cert(cert_path, key_path):
+    """Generate self-signed SSL certificate for WebSocket TLS"""
+    try:
+        # Check if we can use openssl
+        result = subprocess.run(['openssl', 'version'], capture_output=True)
+        if result.returncode != 0:
+            log("OpenSSL not available, cannot generate TLS certificates", 'WARN')
+            return False
+        
+        # Generate key and cert
+        cmd = [
+            'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
+            '-keyout', key_path, '-out', cert_path,
+            '-days', '365', '-nodes',
+            '-subj', '/CN=esp32-bridge',
+            '-addext', 'subjectAltName=DNS:localhost,DNS:esp32-bridge.tailbdd5a.ts.net'
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode == 0:
+            log(f"Generated TLS certificates: {cert_path}", 'CONFIG')
+            return True
+        else:
+            log(f"Failed to generate certificates: {result.stderr.decode()}", 'ERROR')
+            return False
+    except Exception as e:
+        log(f"Certificate generation error: {e}", 'ERROR')
+        return False
+
+
 async def main():
     """Main entry"""
     global config_path, STATE
@@ -893,16 +920,38 @@ async def main():
     # Start hotplug monitor
     hotplug_task = asyncio.create_task(monitor_hotplug(config))
     
+    # Generate SSL certificates for WebSocket TLS
+    ws_dir = os.path.expanduser('~/.esp32-bridge')
+    cert_path = os.path.join(ws_dir, 'ws.crt')
+    key_path = os.path.join(ws_dir, 'ws.key')
+    
+    ssl_context = None
+    if not os.path.exists(cert_path) or not os.path.exists(key_path):
+        log("Generating WebSocket TLS certificates...", 'CONFIG')
+        generate_ssl_cert(cert_path, key_path)
+    
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(cert_path, key_path)
+        log(f"WebSocket TLS enabled: {cert_path}", 'CONFIG')
+    
     # Start WebSocket server
     ws_port = config['network']['ws_port']
-    log(f"WebSocket server: ws://0.0.0.0:{ws_port}/ws", 'WS')
-    
-    async with websockets.serve(handle_ws, '0.0.0.0', ws_port):
-        log("Bridge ready!", 'READY')
+    if ssl_context:
+        log(f"WebSocket server: wss://0.0.0.0:{ws_port}/ws (TLS enabled)", 'WS')
+        log(f"  Also available: ws://0.0.0.0:{ws_port}/ws (plain)", 'WS')
         
-        # Keep running
-        while True:
-            await asyncio.sleep(1)
+        # Start with SSL support
+        async with websockets.serve(handle_ws, '0.0.0.0', ws_port, ssl=ssl_context):
+            log("Bridge ready!", 'READY')
+            while True:
+                await asyncio.sleep(1)
+    else:
+        log(f"WebSocket server: ws://0.0.0.0:{ws_port}/ws", 'WS')
+        async with websockets.serve(handle_ws, '0.0.0.0', ws_port):
+            log("Bridge ready!", 'READY')
+            while True:
+                await asyncio.sleep(1)
 
 
 if __name__ == '__main__':
