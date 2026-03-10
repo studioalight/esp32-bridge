@@ -95,6 +95,7 @@ STATE = {
     'port': None,
     'baudrate': 460800,
     'chip': 'esp32p4',
+    'echo': False,
     'bytes_received': 0,
     'lines_received': 0,
     'last_activity': None,
@@ -459,6 +460,8 @@ async def read_serial(config):
                                 STATE['lines_received'] += 1
                                 STATE['bytes_received'] += len(line)
                                 STATE['last_activity'] = time.time()
+                                if STATE['echo']:
+                                    print(line)
                                 await broadcast(json.dumps({'type': 'serial', 'text': line}))
                     
                     await asyncio.sleep(0.01)
@@ -911,6 +914,42 @@ async def main():
     
     # Start hotplug monitor
     hotplug_task = asyncio.create_task(monitor_hotplug(config))
+    
+    # Keyboard listener for echo toggle (like old bridge)
+    def keyboard_listener():
+        """Listen for 'e' key to toggle echo"""
+        import sys
+        import termios
+        import tty
+        
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd) if os.isatty(fd) else None
+        if old_settings:
+            try:
+                tty.setcbreak(fd)
+                while True:
+                    try:
+                        ch = sys.stdin.read(1)
+                        if ch == 'e' or ch == 'E':
+                            STATE['echo'] = not STATE['echo']
+                            log(f"Serial echo: {'ON' if STATE['echo'] else 'OFF'}", 'CONFIG')
+                        elif ch == 'q' or ch == 'Q':
+                            log("Quitting...", 'STOP')
+                            os._exit(0)
+                    except:
+                        break
+            finally:
+                if old_settings:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    
+    # Start keyboard listener in background (Unix only)
+    try:
+        import threading
+        kb_thread = threading.Thread(target=keyboard_listener, daemon=True)
+        kb_thread.start()
+        log("Press 'e' to toggle serial echo, 'q' to quit", 'CONFIG')
+    except:
+        pass
     
     # Start WebSocket server ( plain ws:// - Tailscale proxy handles wss:// )
     ws_port = config['network']['ws_port']
