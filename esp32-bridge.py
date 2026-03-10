@@ -454,24 +454,19 @@ async def read_serial(config):
                 
                 try:
                     if serial_conn.in_waiting:
-                        log(f'Data available: {serial_conn.in_waiting} bytes', 'DEBUG')
                         data = serial_conn.read(serial_conn.in_waiting)
                         text = data.decode('utf-8', errors='replace')
-                        print(f'[RAW] {repr(text[:100])}', flush=True)  # DEBUG
                         buffer += text
-                        log(f'Buffer now: {len(buffer)} chars', 'DEBUG')
                         
                         while '\n' in buffer:
                             line, buffer = buffer.split('\n', 1)
                             line = line.rstrip('\r')
-                            log(f'Line: {repr(line[:50])}', 'DEBUG')
                             if line:
                                 STATE['lines_received'] += 1
                                 STATE['bytes_received'] += len(line)
                                 STATE['last_activity'] = time.time()
-                                log(f'BROADCASTING: {line[:50]}', 'DEBUG')
                                 if STATE['echo']:
-                                    print(f'[ECHO] {line}', flush=True)
+                                    print(f'[SERIAL] {line}', flush=True)
                                 await broadcast(json.dumps({'type': 'serial', 'text': line}))
                     
                     await asyncio.sleep(0.01)
