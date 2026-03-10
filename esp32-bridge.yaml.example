@@ -1,0 +1,28 @@
+# ESP32 Bridge v2.0
+# https://github.com/studioalight/esp32-bridge
+
+serial:
+  port: null              # null = auto-detect
+  baudrate: 460800        # Default baud rate
+  timeout: 0.1            # Read timeout seconds
+  reconnect_delay: 1.0    # Initial reconnect delay
+  max_reconnect_delay: 30.0
+  hotplug_check_interval: 2.0  # Check for USB hotplug
+
+network:
+  http_host: 0.0.0.0
+  http_port: 5679
+  ws_port: 5678
+  use_tailscale: true     # Auto-detect Tailscale IP
+
+uploads:
+  directory: ~/.esp32-bridge/uploads
+  max_size_mb: 10
+
+flash:
+  default_chip: esp32p4
+  default_baudrate: 460800
+
+logging:
+  level: INFO
+  show_timestamps: true
