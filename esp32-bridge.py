@@ -814,8 +814,9 @@ async def start_http(config):
         ts_ip = get_tailscale_ip()
         if ts_ip:
             STATE['tailscale_ip'] = ts_ip
-            STATE['http_endpoint'] = f"https://{ts_ip}:{port}"
-            log(f"Tailscale HTTPS: {STATE['http_endpoint']}", 'HTTP')
+            log(f"Tailscale IP: {ts_ip}", 'HTTP')
+            log(f"HTTP endpoint: http://{ts_ip}:{port}", 'HTTP')
+            log(f"FQDN endpoint: https://esp32-bridge.tailbdd5a.ts.net:{port}", 'HTTP')
     
     return runner
 
