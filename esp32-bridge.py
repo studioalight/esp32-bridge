@@ -734,9 +734,9 @@ async def handle_index(request):
     <div id="terminal"></div>
     <script>
         // Server-injected host: {host}
-        const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        // Using ws:// since we're on Tailscale (encrypted mesh)
         const wsHost = window.location.hostname || '{host}';
-        const wsUrl = wsScheme + '://' + wsHost + ':5678/ws';
+        const wsUrl = 'ws://' + wsHost + ':5678/ws';
         console.log('WebSocket URL:', wsUrl);
         const ws = new WebSocket(wsUrl);
         const terminal = document.getElementById('terminal');
