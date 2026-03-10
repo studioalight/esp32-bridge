@@ -690,6 +690,13 @@ async def handle_files(request):
 
 async def handle_index(request):
     """Serve web UI"""
+    # Get actual host from request or use configured tailscale IP
+    host = request.headers.get('Host', '').split(':')[0]
+    if not host and STATE['tailscale_ip']:
+        host = STATE['tailscale_ip']
+    if not host:
+        host = 'localhost'
+    
     html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -726,7 +733,12 @@ async def handle_index(request):
     </div>
     <div id="terminal"></div>
     <script>
-        const ws = new WebSocket('wss://' + window.location.hostname + ':5678/ws');
+        // Server-injected host: {host}
+        const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsHost = window.location.hostname || '{host}';
+        const wsUrl = wsScheme + '://' + wsHost + ':5678/ws';
+        console.log('WebSocket URL:', wsUrl);
+        const ws = new WebSocket(wsUrl);
         const terminal = document.getElementById('terminal');
         const status = document.getElementById('status');
         
