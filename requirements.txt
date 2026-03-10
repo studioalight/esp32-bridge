@@ -1,0 +1,10 @@
+# ESP32-Bridge v2.0 Requirements
+
+# Core dependencies
+pyserial>=3.5
+websockets>=11.0
+aiohttp>=3.8
+pyyaml>=6.0
+
+# Flashing (critical: v4.4+ for ESP32-P4 support)
+esptool>=4.4

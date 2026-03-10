@@ -2,6 +2,9 @@
 """
 ESP32 Bridge v2.0 - Serial monitor + firmware flashing via WebSocket
 
+Hardware: ESP32-P4, ESP32-S3, ESP32 (auto-detected)
+Requirements: esptool.py v4.4+ for ESP32-P4 support
+
 Features:
     - Auto-detect ESP32 port with hotplug support (recovery after unplug)
     - Configurable baud rate (default 460800)
