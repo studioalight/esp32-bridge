@@ -199,6 +199,7 @@ def get_esp32_port(preferred_port=None):
     
     # Try ESP32 keywords
     for keyword, name in ESP32_KEYWORDS:
+        for port in ports:
             check = port.description.lower() + ' ' + port.device.lower()
             if keyword in check:
                 log(f"Found {name} on {port.device}")
@@ -817,8 +818,14 @@ async def main():
     parser.add_argument('--save-config', help='Save current config to file')
     args = parser.parse_args()
     
-    # Load config
+    # Load config - check for default if not specified
     config_path = args.config
+    if not config_path:
+        default_config = os.path.expanduser('~/.esp32-bridge/config.yaml')
+        if os.path.exists(default_config):
+            config_path = default_config
+            log(f"Using default config: {config_path}", 'CONFIG')
+    
     config = load_config(config_path)
     
     # Override with CLI args
