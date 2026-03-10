@@ -726,7 +726,7 @@ async def handle_index(request):
     </div>
     <div id="terminal"></div>
     <script>
-        const ws = new WebSocket('wss://' + window.location.host + ':5678/ws');
+        const ws = new WebSocket('wss://' + window.location.hostname + ':5678/ws');
         const terminal = document.getElementById('terminal');
         const status = document.getElementById('status');
         
