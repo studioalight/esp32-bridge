@@ -225,6 +225,10 @@ def reset_esp32(port, baudrate):
             time.sleep(0.05)
             ser.rts = True
             time.sleep(0.05)
+            # ESP32 needs DTR=False after reset to exit bootloader
+            ser.dtr = False
+            ser.rts = False
+            time.sleep(0.05)
         log("Reset complete", 'RESET')
         return True
     except Exception as e:
