@@ -716,6 +716,11 @@ async def handle_index(request):
 <body>
     <h1>🔌 ESP32 Bridge v2.0</h1>
     <div id="status">Connecting...</div>
+    <div id="https-notice" style="display:none; background:#e94560; padding:10px; margin:10px 0; border-radius:5px;">
+        <strong>HTTPS Mode:</strong> WebSocket disabled by browser security.<br>
+        For full functionality (serial monitor, flash), use:<br>
+        <a href="http://{host}:5679" style="color:#fff;">http://{host}:5679</a>
+    </div>
     <div>
         <button onclick="sendCmd('reset')">Reset</button>
         <button onclick="sendCmd('bootloader')">Bootloader</button>
@@ -734,8 +739,15 @@ async def handle_index(request):
     <div id="terminal"></div>
     <script>
         // Server-injected host: {host}
-        // Using ws:// since we're on Tailscale (encrypted mesh)
         const wsHost = window.location.hostname || '{host}';
+        
+        // Show HTTPS notice if applicable
+        if (window.location.protocol === 'https:') {
+            document.getElementById('https-notice').style.display = 'block';
+            status.innerHTML = '<span class="disconnected">● HTTPS Mode - WebSocket Unavailable</span>';
+        }
+        
+        // Use ws:// for WebSocket (plain TCP)
         const wsUrl = 'ws://' + wsHost + ':5678/ws';
         console.log('WebSocket URL:', wsUrl);
         const ws = new WebSocket(wsUrl);
