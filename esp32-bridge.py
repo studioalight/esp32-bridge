@@ -7,7 +7,7 @@ Requirements: esptool.py v4.4+ for ESP32-P4 support
 
 Features:
     - Auto-detect ESP32 port with hotplug support (recovery after unplug)
-    - Configurable baud rate (default 460800)
+    - Configurable baud rate (default 115200)
     - CLI arguments and config file for persistence
     - Live serial monitoring streamed via WebSocket
     - Remote reset/bootloader control
@@ -26,7 +26,7 @@ WebSocket Commands:
     {"action": "bootloader"}                   # Enter bootloader
     {"action": "status"}                       # Get status
     {"action": "flash", "file": "firmware.bin", "addr": "0x10000"}
-    {"action": "set_baud", "rate": 460800}   # Change baud rate
+    {"action": "set_baud", "rate": 115200}   # Change baud rate
     {"action": "get_chip"}                   # Get current chip type
     {"action": "set_chip", "chip": "esp32p4"} # Set chip type (auto-detected)
 
@@ -62,7 +62,7 @@ from aiohttp import web
 DEFAULT_CONFIG = {
     'serial': {
         'port': None,  # Auto-detect
-        'baudrate': 460800,
+        'baudrate': 115200,
         'timeout': 0.1,
         'reconnect_delay': 1.0,
         'max_reconnect_delay': 30.0,
@@ -80,7 +80,7 @@ DEFAULT_CONFIG = {
     },
     'flash': {
         'default_chip': 'esp32p4',
-        'default_baudrate': 460800,
+        'default_baudrate': 115200,
     },
     'logging': {
         'level': 'INFO',
@@ -93,7 +93,7 @@ STATE = {
     'config': {},
     'connected': False,
     'port': None,
-    'baudrate': 460800,
+    'baudrate': 115200,
     'chip': 'esp32p4',
     'echo': False,
     'bytes_received': 0,
@@ -750,9 +750,9 @@ async def handle_index(request):
     </div>
     <div>
         <select id="baud">
-            <option value="115200">115200</option>
+            <option value="115200" selected>115200</option>
             <option value="230400">230400</option>
-            <option value="460800" selected>460800</option>
+            <option value="460800">460800</option>
             <option value="921600">921600</option>
         </select>
         <button onclick="setBaud()">Set Baud</button>
@@ -872,7 +872,7 @@ async def main():
     parser = argparse.ArgumentParser(description='ESP32 Bridge v2.0')
     parser.add_argument('--config', '-c', help='Config file path')
     parser.add_argument('--port', '-p', help='Serial port (auto-detect if not specified)')
-    parser.add_argument('--baud', '-b', type=int, default=460800, help='Baud rate (default: 460800)')
+    parser.add_argument('--baud', '-b', type=int, default=115200, help='Baud rate (default: 115200)')
     parser.add_argument('--chip', type=str, default='esp32p4', 
                        choices=['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c6', 'esp32h2', 'esp32p4'],
                        help='Default chip type (default: esp32p4)')

@@ -3,7 +3,7 @@
 
 serial:
   port: null              # null = auto-detect
-  baudrate: 460800        # Default baud rate
+  baudrate: 115200        # Default 115200 for reliable monitoring
   timeout: 0.1            # Read timeout seconds
   reconnect_delay: 1.0    # Initial reconnect delay
   max_reconnect_delay: 30.0
