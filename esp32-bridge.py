@@ -466,7 +466,10 @@ async def read_serial(config):
                 except serial.SerialException:
                     break
                 except Exception as e:
-                    log(f"Read error: {e}", 'ERROR')
+                    if 'Device not configured' in str(e):
+                        pass  # USB unplugged, normal
+                    else:
+                        log(f"Read error: {e}", 'ERROR')
                     await asyncio.sleep(0.1)
                     
         except Exception as e:
@@ -505,6 +508,7 @@ async def handle_ws(websocket):
                 data = json.loads(message)
                 action = data.get('action')
                 config = STATE['config']
+                global serial_conn
                 port = STATE['port'] or config['serial']['port']
                 baudrate = data.get('rate', STATE['baudrate'] or config['serial']['baudrate'])
                 
@@ -517,6 +521,10 @@ async def handle_ws(websocket):
                 
                 elif action == 'bootloader':
                     if port:
+                        # Close serial for bootloader
+                        if serial_conn and serial_conn.is_open:
+                            serial_conn.close()
+                            await asyncio.sleep(0.1)
                         enter_bootloader(port, baudrate)
                         await websocket.send(json.dumps({'type': 'system', 'message': 'Bootloader mode'}))
                     else:
@@ -760,6 +768,12 @@ async def handle_index(request):
                     appendLine(data.text || '');
                 }} else if (data.type === 'system') {{
                     appendLine('[SYS] ' + data.message);
+                }} else if (data.type === 'status') {{
+                    appendLine('[STATUS] Port: ' + (data.port || 'none'));
+                    appendLine('[STATUS] Connected: ' + data.connected);
+                    appendLine('[STATUS] Baud: ' + data.baudrate);
+                    appendLine('[STATUS] Chip: ' + (data.chip || 'unknown'));
+                    appendLine('[STATUS] Lines: ' + data.lines_received + '  Bytes: ' + data.bytes_received);
                 }} else if (data.type === 'flash') {{
                     if (data.status === 'progress') {{
                         appendLine('[FLASH] ' + data.pct + '%');
