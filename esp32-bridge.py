@@ -215,10 +215,11 @@ def get_esp32_port(preferred_port=None):
 
 
 def reset_esp32(port, baudrate):
-    """Reset ESP32 using DTR/RTS"""
+    """Reset ESP32 using DTR/RTS - use 115200 for reset reliability"""
     try:
         log(f"Resetting ESP32 on {port}...", 'RESET')
-        with serial.Serial(port, baudrate, timeout=1) as ser:
+        # Use 115200 for reset - higher baud can cause issues
+        with serial.Serial(port, 115200, timeout=1) as ser:
             ser.dtr = True
             ser.rts = False
             time.sleep(0.05)
@@ -232,10 +233,10 @@ def reset_esp32(port, baudrate):
 
 
 def enter_bootloader(port, baudrate):
-    """Enter bootloader mode"""
+    """Enter bootloader mode - use 115200 for reliability"""
     try:
         log(f"Entering bootloader on {port}...", 'BOOT')
-        with serial.Serial(port, baudrate, timeout=1) as ser:
+        with serial.Serial(port, 115200, timeout=1) as ser:
             ser.dtr = False
             ser.rts = True
             time.sleep(0.1)
@@ -449,19 +450,24 @@ async def read_serial(config):
                 
                 try:
                     if serial_conn.in_waiting:
+                        log(f'Data available: {serial_conn.in_waiting} bytes', 'DEBUG')
                         data = serial_conn.read(serial_conn.in_waiting)
                         text = data.decode('utf-8', errors='replace')
+                        print(f'[RAW] {repr(text[:100])}', flush=True)  # DEBUG
                         buffer += text
+                        log(f'Buffer now: {len(buffer)} chars', 'DEBUG')
                         
                         while '\n' in buffer:
                             line, buffer = buffer.split('\n', 1)
                             line = line.rstrip('\r')
+                            log(f'Line: {repr(line[:50])}', 'DEBUG')
                             if line:
                                 STATE['lines_received'] += 1
                                 STATE['bytes_received'] += len(line)
                                 STATE['last_activity'] = time.time()
+                                log(f'BROADCASTING: {line[:50]}', 'DEBUG')
                                 if STATE['echo']:
-                                    print(line)
+                                    print(f'[ECHO] {line}', flush=True)
                                 await broadcast(json.dumps({'type': 'serial', 'text': line}))
                     
                     await asyncio.sleep(0.01)
