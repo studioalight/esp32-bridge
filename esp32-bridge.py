@@ -295,20 +295,14 @@ async def flash_firmware(filepath, address, port, baudrate, chip='esp32p4'):
     
     try:
         cmd = [
-            'esptool.py',
-            '--chip', chip,
-            '--port', port,
+            'esptool',
             '--baud', str(baudrate),
-            '--before', 'default_reset',
-            '--after', 'hard_reset',
-            'write_flash', '-z',
-            '--flash_mode', 'dio',
-            '--flash_freq', '80m',
-            '--flash_size', 'detect',
+            '--port', port,
+            'write-flash',
             address, filepath
         ]
         
-        log(f"Starting flash: esptool.py --chip {chip} --port {port} --baud {baudrate}...", 'FLASH')
+        log(f"Starting flash: esptool --baud {baudrate} --port {port}...", 'FLASH')
         
         process = await asyncio.create_subprocess_exec(
             *cmd,
