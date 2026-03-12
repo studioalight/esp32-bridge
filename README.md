@@ -6,7 +6,8 @@ Network bridge for ESP32 development - serial monitor + firmware flashing over W
 
 - **Serial Monitoring** - Live streaming over WebSocket with auto-reconnect
 - **USB Hotplug Support** - Detects unplugging/replugging automatically
-- **Firmare Flashing** - via esptool.py with progress tracking
+- **Firmware Flashing** - via esptool with progress tracking
+- **Batch Flash** - Atomic multi-file flashing in single esptool invocation
 - **HTTP Upload** - Upload .bin files via curl
 - **Baud Rate Selection** - CLI args and runtime switching
 - **Config Persistence** - YAML config file support
@@ -105,8 +106,20 @@ Connect to `wss://HOST:5678/ws`
 // Enter bootloader
 {"action": "bootloader"}
 
-// Flash file
-{"action": "flash", "file": "firmware.bin", "addr": "0x10000"}
+// Flash single file (legacy)
+{"action": "flash", "file": "firmware.bin", "addr": "0x10000", "rate": 1500000}
+
+// Flash batch (atomic multi-file)
+{
+  "action": "flash_batch",
+  "files": [
+    {"filename": "bootloader.bin", "addr": "0x2000"},
+    {"filename": "partition-table.bin", "addr": "0x8000"},
+    {"filename": "app.bin", "addr": "0x10000"}
+  ],
+  "rate": 1500000,
+  "reset_after": true
+}
 
 // Get status
 {"action": "status"}
@@ -116,6 +129,27 @@ Connect to `wss://HOST:5678/ws`
 
 // Get config
 {"action": "get_config"}
+
+// Get current chip type
+{"action": "get_chip"}
+
+// Set chip type
+{"action": "set_chip", "chip": "esp32p4"}
+```
+
+### Responses
+
+**Batch flash progress:**
+```json
+{"type": "flash_batch", "status": "file_start", "file_num": 1, "total": 4}
+{"type": "flash_batch", "status": "progress", "line": "Writing at 0x00002000... (5 %)"}
+{"type": "flash_batch", "status": "file_complete", "file_num": 1}
+{"type": "flash_batch", "status": "complete", "time": "45.2s", "reset_performed": true}
+```
+
+**Error:**
+```json
+{"type": "flash_batch", "status": "error", "message": "File not found: app.bin", "at_file": "app.bin"}
 ```
 
 ## CLI Arguments
