@@ -360,6 +360,141 @@ async def flash_firmware(filepath, address, port, baudrate, chip='esp32p4'):
         STATE['flash_progress'] = 0
 
 
+async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True):
+    """Flash multiple files in one esptool invocation"""
+    global STATE, serial_conn
+    
+    upload_dir = STATE['config']['uploads']['directory']
+    start_time = time.time()
+    
+    # Validate all files exist first
+    for i, f in enumerate(files):
+        filename = f.get('file') or f.get('filename')
+        if not filename:
+            log(f"Flash batch error: file {i} has no filename", 'ERROR')
+            await broadcast(json.dumps({
+                'type': 'flash_batch', 'status': 'error',
+                'message': f'File {i} has no filename', 'at_file': str(i)
+            }))
+            return False
+        filepath = os.path.join(upload_dir, filename)
+        if not os.path.exists(filepath):
+            log(f"Flash batch error: file not found: {filename}", 'ERROR')
+            await broadcast(json.dumps({
+                'type': 'flash_batch', 'status': 'error',
+                'message': f'File not found: {filename}', 'at_file': filename
+            }))
+            return False
+    
+    # Close serial connection for flashing
+    if serial_conn and serial_conn.is_open:
+        serial_conn.close()
+        await asyncio.sleep(0.5)
+    
+    STATE['flashing'] = True
+    STATE['flash_progress'] = 0
+    
+    log(f"Starting batch flash: {len(files)} files")
+    
+    # Build esptool command with all addresses and files
+    cmd = [
+        'esptool',
+        '--baud', str(baudrate),
+        '--port', port,
+        '--chip', chip,
+        'write-flash'
+    ]
+    
+    # Add each file with its address
+    for i, f in enumerate(files):
+        filename = f.get('file') or f.get('filename')
+        address = f.get('addr') or f.get('address', '0x10000')
+        filepath = os.path.join(upload_dir, filename)
+        cmd.extend([address, filepath])
+        log(f"[{i+1}/{len(files)}] {filename} @ {address}", 'FLASH')
+    
+    await broadcast(json.dumps({
+        'type': 'flash_batch', 'status': 'start',
+        'total': len(files), 'baud': baudrate
+    }))
+    
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT
+        )
+        
+        current_file = 0
+        
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            
+            text = line.decode().strip()
+            if text:
+                log(f"[esptool] {text[:120]}")
+                
+                # Parse progress
+                if '%' in text:
+                    await broadcast(json.dumps({
+                        'type': 'flash_batch', 'status': 'progress',
+                        'line': text
+                    }))
+                elif 'Writing' in text or 'Compressed' in text:
+                    current_file += 1
+                    await broadcast(json.dumps({
+                        'type': 'flash_batch', 'status': 'file_start',
+                        'file_num': current_file, 'total': len(files)
+                    }))
+                elif 'Hash verified' in text or 'hash verified' in text:
+                    await broadcast(json.dumps({
+                        'type': 'flash_batch', 'status': 'file_complete',
+                        'file_num': current_file
+                    }))
+                else:
+                    await broadcast(json.dumps({
+                        'type': 'flash_batch', 'status': 'output',
+                        'line': text
+                    }))
+        
+        returncode = await process.wait()
+        
+        elapsed = time.time() - start_time
+        
+        if returncode == 0:
+            log(f"Batch flash complete! ({elapsed:.1f}s)", 'FLASH')
+            
+            # Reset if requested
+            if reset_after:
+                await asyncio.sleep(0.5)
+                reset_esp32(port, baudrate)
+            
+            await broadcast(json.dumps({
+                'type': 'flash_batch', 'status': 'complete',
+                'time': f"{elapsed:.1f}", 'reset_performed': reset_after
+            }))
+            return True
+        else:
+            log(f"Batch flash failed: code {returncode}", 'ERROR')
+            await broadcast(json.dumps({
+                'type': 'flash_batch', 'status': 'error',
+                'code': returncode, 'message': f'Flash failed with code {returncode}'
+            }))
+            return False
+            
+    except Exception as e:
+        log(f"Batch flash error: {e}", 'ERROR')
+        await broadcast(json.dumps({
+            'type': 'flash_batch', 'status': 'error', 'msg': str(e)
+        }))
+        return False
+    finally:
+        STATE['flashing'] = False
+        STATE['flash_progress'] = 0
+
+
 async def monitor_hotplug(config):
     """Monitor for USB hotplug events"""
     global STATE
@@ -560,6 +695,30 @@ async def handle_ws(websocket):
                     else:
                         await websocket.send(json.dumps({
                             'type': 'error',
+                            'message': 'Cannot flash: no valid port'
+                        }))
+                
+                elif action == 'flash_batch':
+                    files = data.get('files', [])
+                    reset_after = data.get('reset_after', True)
+                    chip = data.get('chip', STATE['chip'])
+                    
+                    if not files:
+                        await websocket.send(json.dumps({
+                            'type': 'flash_batch',
+                            'status': 'error',
+                            'message': 'No files specified'
+                        }))
+                        continue
+                    
+                    log(f"Flash batch: {len(files)} files, reset={reset_after}", 'FLASH')
+                    
+                    if port and not port.startswith('/dev/tty'):
+                        await flash_batch(files, port, baudrate, chip, reset_after)
+                    else:
+                        await websocket.send(json.dumps({
+                            'type': 'flash_batch',
+                            'status': 'error',
                             'message': 'Cannot flash: no valid port'
                         }))
                 
