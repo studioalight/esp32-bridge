@@ -105,6 +105,7 @@ STATE = {
     'flash_progress': 0,
     'tailscale_ip': None,
     'http_endpoint': None,
+    'local_ip': None,
 }
 
 clients = set()
@@ -124,6 +125,18 @@ ESP32_KEYWORDS = [
     ('silicon labs', 'Silicon Labs'),
     ('wch.cn', 'WCH USB'),
 ]
+
+
+def get_local_ip():
+    """Get local LAN IP for containers on same network"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return ""
 
 
 def load_config(path=None):
@@ -724,6 +737,7 @@ async def handle_ws(websocket):
                 
                 elif action == 'status':
                     ts_ip = get_tailscale_ip() or config['network'].get('tailscale_ip', '')
+                    local_ip = get_local_ip()
                     await websocket.send(json.dumps({
                         'type': 'status',
                         'connected': STATE['connected'],
@@ -732,7 +746,8 @@ async def handle_ws(websocket):
                         'chip': STATE['chip'],
                         'bytes_received': STATE['bytes_received'],
                         'lines_received': STATE['lines_received'],
-                        'tailscale_ip': ts_ip
+                        'tailscale_ip': ts_ip,
+                        'local_ip': local_ip
                     }))
                 
                 elif action == 'set_baud':
@@ -1066,6 +1081,12 @@ async def main():
     log(f"Baud rate: {config['serial']['baudrate']}", 'CONFIG')
     log(f"Default chip: {config['flash']['default_chip']}", 'CONFIG')
     log(f"Upload dir: {config['uploads']['directory']}", 'CONFIG')
+    
+    # Detect local IP for same-LAN optimization
+    local_ip = get_local_ip()
+    if local_ip:
+        STATE['local_ip'] = local_ip
+        log(f"Local IP: {local_ip} (for same-network containers)", 'CONFIG')
     
     # Start services
     http_runner = await start_http(config)
