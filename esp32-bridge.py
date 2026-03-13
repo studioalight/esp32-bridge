@@ -772,6 +772,7 @@ async def handle_ws(websocket):
                     await websocket.send(json.dumps({
                         'type': 'status',
                         'version': '2.0-localip',
+                        'git_hash': GIT_HASH,
                         'connected': STATE['connected'],
                         'port': STATE['port'],
                         'baudrate': STATE['baudrate'],
@@ -1109,7 +1110,7 @@ async def main():
     if args.save_config:
         save_config(os.path.expanduser(args.save_config), config)
     
-    log(f"ESP32 Bridge v2.0 starting...", 'START')
+    log(f"ESP32 Bridge v2.0 starting... (commit: {GIT_HASH})", 'START')
     log(f"Baud rate: {config['serial']['baudrate']}", 'CONFIG')
     log(f"Default chip: {config['flash']['default_chip']}", 'CONFIG')
     log(f"Upload dir: {config['uploads']['directory']}", 'CONFIG')
