@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "cc523e5"  # GIT_HASH_MARKER
+GIT_HASH = "d96cd6f"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -70,6 +70,9 @@ DEFAULT_CONFIG = {
         'reconnect_delay': 1.0,
         'max_reconnect_delay': 30.0,
         'hotplug_check_interval': 2.0,
+    },
+    'logging': {
+        'use_color': True,  # Color output (disable with --no-color)
     },
     'network': {
         'http_host': '0.0.0.0',
@@ -109,6 +112,7 @@ STATE = {
     'tailscale_ip': None,
     'http_endpoint': None,
     'local_ip': None,
+    'use_color': True,  # Color output toggle
 }
 
 clients = set()
@@ -142,7 +146,7 @@ def get_local_ip():
         if ip and not ip.startswith('127.'):
             return ip
     except Exception as e:
-        print(f"[DEBUG] Method 1 failed: {e}", file=sys.stderr)
+        pass  # Method 1 failed, try next
     
     # Method 2: Get local hostname resolution
     try:
@@ -222,10 +226,36 @@ def get_tailscale_ip():
     return None
 
 
+# ANSI color codes - color-blind friendly palette
+# Blue=info, Yellow=config, Magenta=error/warning, Cyan=flash, Green=success
+COLORS = {
+    'RESET': '\033[0m',
+    'START': '\033[38;5;208m',    # Orange (distinct)
+    'CONFIG': '\033[93m',          # Yellow
+    'INFO': '\033[38;5;75m',       # Light blue
+    'SUCCESS': '\033[38;5;114m',  # Light green (distinct from red)
+    'FLASH': '\033[96m',           # Cyan
+    'ERROR': '\033[38;5;204m',    # Light red/pink (distinct)
+    'WARN': '\033[38;5;214m',     # Orange-yellow (distinct)
+    'CONNECTED': '\033[38;5;114m', # Light green
+    'DISCONNECT': '\033[38;5;140m', # Muted purple
+    'SERIAL': '\033[38;5;250m',   # Light gray
+    'BOOT': '\033[38;5;183m',     # Light purple
+    'UPLOAD': '\033[38;5;116m',   # Teal
+}
+
+
 def log(msg, level='INFO'):
-    """Print with timestamp"""
+    """Print with timestamp and optional colors"""
     ts = datetime.now().strftime('%H:%M:%S')
-    print(f"[{ts}] [{level}] {msg}")
+    use_color = STATE.get('use_color', True)
+    
+    if use_color and level in COLORS:
+        color = COLORS[level]
+        reset = COLORS['RESET']
+        print(f"[{ts}] {color}[{level}]{reset} {msg}")
+    else:
+        print(f"[{ts}] [{level}] {msg}")
     sys.stdout.flush()
 
 
@@ -1081,7 +1111,11 @@ async def main():
     parser.add_argument('--ws-port', type=int, default=5678, help='WebSocket port')
     parser.add_argument('--auto', action='store_true', help='Auto-detect and run')
     parser.add_argument('--save-config', help='Save current config to file')
+    parser.add_argument('--no-color', action='store_true', help='Disable colored output')
     args = parser.parse_args()
+    
+    # Set color mode
+    STATE['use_color'] = not args.no_color
     
     # Load config - check for default if not specified
     config_path = args.config
