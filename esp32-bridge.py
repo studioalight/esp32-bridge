@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "0c56370"  # GIT_HASH_MARKER
+GIT_HASH = "0fe762b"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -434,7 +434,7 @@ async def flash_firmware(filepath, address, port, baudrate, chip='esp32p4'):
         STATE['flash_progress'] = 0
 
 
-async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True, verify=True):
+async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True):
     """Flash multiple files in one esptool invocation"""
     global STATE, serial_conn
     
@@ -468,7 +468,7 @@ async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True, v
     STATE['flashing'] = True
     STATE['flash_progress'] = 0
     
-    log(f"Starting batch flash: {len(files)} files (verify={'on' if verify else 'off'})")
+    log(f"Starting batch flash: {len(files)} files")
     
     # Build esptool command with all addresses and files
     cmd = [
@@ -476,10 +476,8 @@ async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True, v
         '--baud', str(baudrate),
         '--port', port,
         '--chip', chip,
+        'write-flash'
     ]
-    if not verify:
-        cmd.append('--no-verify')
-    cmd.append('write-flash')
     
     # Add each file with its address
     for i, f in enumerate(files):
@@ -777,7 +775,6 @@ async def handle_ws(websocket):
                 elif action == 'flash_batch':
                     files = data.get('files', [])
                     reset_after = data.get('reset_after', True)
-                    verify = data.get('verify', True)
                     chip = data.get('chip', STATE['chip'])
                     
                     if not files:
@@ -788,10 +785,10 @@ async def handle_ws(websocket):
                         }))
                         continue
                     
-                    log(f"Flash batch: {len(files)} files, reset={reset_after}, verify={verify}", 'FLASH')
+                    log(f"Flash batch: {len(files)} files, reset={reset_after}", 'FLASH')
                     
                     if port and not port.startswith('/dev/tty'):
-                        await flash_batch(files, port, baudrate, chip, reset_after, verify)
+                        await flash_batch(files, port, baudrate, chip, reset_after)
                     else:
                         await websocket.send(json.dumps({
                             'type': 'flash_batch',
