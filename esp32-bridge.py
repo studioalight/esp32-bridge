@@ -129,14 +129,42 @@ ESP32_KEYWORDS = [
 
 def get_local_ip():
     """Get local LAN IP for containers on same network"""
+    # Method 1: UDP socket to external host (most reliable but may fail in containers)
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if ip and not ip.startswith('127.'):
+            return ip
+    except Exception as e:
+        print(f"[DEBUG] Method 1 failed: {e}", file=sys.stderr)
+    
+    # Method 2: Get local hostname resolution
+    try:
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        if ip and not ip.startswith('127.'):
+            return ip
     except:
-        return ""
+        pass
+    
+    # Method 3: Check all network interfaces
+    try:
+        import subprocess
+        result = subprocess.run(['ifconfig'], capture_output=True, text=True)
+        if result.returncode == 0:
+            import re
+            # Look for inet 192.168.x.x or 10.x.x.x
+            ip_pattern = r'inet\s+(192\.168\.[0-9]+\.[0-9]+|10\.[0-9]+\.[0-9]+\.[0-9]+)'
+            matches = re.findall(ip_pattern, result.stdout)
+            if matches:
+                return matches[0]
+    except:
+        pass
+    
+    return ""
 
 
 def load_config(path=None):
