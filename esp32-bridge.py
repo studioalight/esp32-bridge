@@ -723,6 +723,7 @@ async def handle_ws(websocket):
                         }))
                 
                 elif action == 'status':
+                    ts_ip = get_tailscale_ip() or config['network'].get('tailscale_ip', '')
                     await websocket.send(json.dumps({
                         'type': 'status',
                         'connected': STATE['connected'],
@@ -730,7 +731,8 @@ async def handle_ws(websocket):
                         'baudrate': STATE['baudrate'],
                         'chip': STATE['chip'],
                         'bytes_received': STATE['bytes_received'],
-                        'lines_received': STATE['lines_received']
+                        'lines_received': STATE['lines_received'],
+                        'tailscale_ip': ts_ip
                     }))
                 
                 elif action == 'set_baud':
