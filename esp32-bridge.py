@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "0fe762b"  # GIT_HASH_MARKER
+GIT_HASH = "19886b3"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -86,7 +86,7 @@ DEFAULT_CONFIG = {
     },
     'flash': {
         'default_chip': 'esp32p4',
-        'default_baudrate': 115200,
+        'default_baudrate': 3000000,  # ESP32-P4 Native USB max stable
     },
     'logging': {
         'level': 'INFO',
