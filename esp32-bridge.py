@@ -43,6 +43,9 @@ Requires:
     pip install esptool
 """
 
+# Git commit hash - auto-updated by pre-commit hook
+GIT_HASH = "unknown"  # GIT_HASH_MARKER
+
 import asyncio
 import serial
 import serial.tools.list_ports
