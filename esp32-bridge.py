@@ -740,6 +740,7 @@ async def handle_ws(websocket):
                     local_ip = get_local_ip()
                     await websocket.send(json.dumps({
                         'type': 'status',
+                        'version': '2.0-localip',
                         'connected': STATE['connected'],
                         'port': STATE['port'],
                         'baudrate': STATE['baudrate'],
