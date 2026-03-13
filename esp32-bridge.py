@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "unknown"  # GIT_HASH_MARKER
+GIT_HASH = "cc523e5"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -887,8 +887,9 @@ async def handle_upload(request):
         'success': True,
         'filename': filename,
         'size': size,
-        'path': filepath
-    })
+        'path': filepath,
+        'bridge_version': GIT_HASH
+    }, headers={'X-Bridge-Version': GIT_HASH})
 
 
 async def handle_files(request):
@@ -905,7 +906,8 @@ async def handle_files(request):
             'modified': os.path.getmtime(filepath)
         })
     
-    return web.json_response({'files': files})
+    return web.json_response({'files': files},
+        headers={'X-Bridge-Version': GIT_HASH})
 
 
 async def handle_index(request):
