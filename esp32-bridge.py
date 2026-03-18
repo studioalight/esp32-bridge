@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "1a3efc9"  # GIT_HASH_MARKER
+GIT_HASH = "ae9bd05"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -496,11 +496,7 @@ async def detect_chip_id(port, baudrate=115200):
         # Debug: log full output
         log(f"esptool output:\n{output}", 'INFO')
         
-        if process.returncode != 0:
-            log(f"Chip ID detection failed (code {process.returncode}): {output[:200]}", 'ERROR')
-            return None
-        
-        # Parse output
+        # Parse output even if command fails (we might have gotten MAC before stub error)
         result = {
             'chip': None,
             'chip_id': None,
@@ -510,30 +506,25 @@ async def detect_chip_id(port, baudrate=115200):
         
         for line in output.split('\n'):
             line = line.strip()
-            if 'Chip is' in line or 'Chip type:' in line:
-                # e.g., "Chip is ESP32-S3 (revision 0)" or "Chip type: ESP32-S3"
-                if 'Chip is' in line:
-                    parts = line.split('Chip is ')
-                else:
-                    parts = line.split('Chip type:')
+            if 'Chip type:' in line or 'Chip is' in line:
+                parts = line.split('Chip type:') if 'Chip type:' in line else line.split('Chip is ')
                 if len(parts) > 1:
                     chip_name = parts[1].split()[0].lower().replace('-', '')
                     result['chip'] = chip_name
             elif 'MAC:' in line:
-                # e.g., "MAC: aa:bb:cc:dd:ee:ff"
                 parts = line.split('MAC:')
                 if len(parts) > 1:
                     result['mac'] = parts[1].strip()
         
-        # For ESP32-S3 and others without chip ID, use MAC as identifier
-        if result['mac'] and not result['chip_id']:
+        # If we got chip and MAC, return success even if stub failed
+        if result['chip'] and result['mac']:
             result['chip_id'] = result['mac']
-        
-        if result['chip']:
-            log(f"Detected chip: {result['chip']}, ID: {result.get('chip_id', 'N/A')}", 'INFO')
+            log(f"Detected chip: {result['chip']}, MAC: {result['mac']}", 'INFO')
             return result
-        else:
-            return None
+        
+        # Failed but we should have returned earlier if we had valid data
+        log(f"Chip ID detection failed: no chip or MAC found", 'ERROR')
+        return None
             
     except Exception as e:
         log(f"Chip detection error: {e}", 'ERROR')
