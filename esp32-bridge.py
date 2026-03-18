@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "783d0fe"  # GIT_HASH_MARKER
+GIT_HASH = "1a3efc9"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -259,12 +259,13 @@ def log(msg, level='INFO'):
     sys.stdout.flush()
 
 
-def get_esp32_port(preferred_port=None, preferred_hwid=None):
+def get_esp32_port(preferred_port=None, preferred_hwid=None, strict_hwid=False):
     """Auto-detect ESP32 USB port with fallback
     
     Args:
         preferred_port: Preferred port device path (e.g., /dev/ttyUSB0)
         preferred_hwid: Preferred device hardware ID (VID:PID:Serial) for matching
+        strict_hwid: If True, only match by HWID and return None if not found
     """
     ports = list(serial.tools.list_ports.comports())
     
@@ -286,6 +287,10 @@ def get_esp32_port(preferred_port=None, preferred_hwid=None):
             if preferred_hwid in port.hwid:
                 log(f"Matched device by HWID: {port.device}", 'INFO')
                 return port.device, port.hwid
+        
+        # If strict mode and HWID not found, don't fall back
+        if strict_hwid:
+            return None, None
     
     # Second: Try preferred port name
     if preferred_port:
@@ -745,9 +750,14 @@ async def read_serial(config):
                 continue
             
             # Try to find device by HWID first, then by port name
-            port, hwid = get_esp32_port(preferred_port, preferred_hwid)
+            # Use strict mode if we have a known device that disconnected
+            strict_mode = preferred_hwid is not None
+            port, hwid = get_esp32_port(preferred_port, preferred_hwid, strict_hwid=strict_mode)
             if not port:
-                log("No ESP32 device found", 'CONNECT')
+                if strict_mode:
+                    log(f"Waiting for device {preferred_hwid[:30]}... to reconnect", 'RECONNECT')
+                else:
+                    log("No ESP32 device found", 'CONNECT')
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 1.5, max_reconnect_delay)
                 continue
