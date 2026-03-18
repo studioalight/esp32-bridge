@@ -142,6 +142,7 @@ Connect to `wss://HOST:5678/ws`
 // Get chip ID from connected device
 {"action": "get_chip_id"}
 // Response: {"type": "chip_id", "chip_id": "80:b5:4e:f3:2d:04", "mac": "80:b5:4e:f3:2d:04", "target": "esp32s3", "status": "connected"}
+// Note: Device automatically resets back to app mode after detection
 ```
 
 ### Responses

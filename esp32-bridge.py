@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "52c476b"  # GIT_HASH_MARKER
+GIT_HASH = "75d2049"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
