@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "2bb400f"  # GIT_HASH_MARKER
+GIT_HASH = "48e8ecf"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -461,9 +461,9 @@ async def detect_chip_id(port, baudrate=115200):
             'esptool',
             '--port', port,
             '--baud', str(baudrate),
-            '--before', 'default_reset',  # Reset before operation
-            '--after', 'no_reset',  # Don't reset after
-            'chip_id'
+            '--before', 'default-reset',
+            '--after', 'no-reset',
+            'chip-id'
         ]
         
         log(f"Detecting chip ID: {port}", 'INFO')
@@ -492,33 +492,26 @@ async def detect_chip_id(port, baudrate=115200):
             'status': 'connected'
         }
         
-        has_no_chip_id = False
-        
         for line in output.split('\n'):
             line = line.strip()
-            if 'Chip is' in line:
-                # e.g., "Chip is ESP32-S3 (revision 0)"
-                parts = line.split('Chip is ')
+            if 'Chip is' in line or 'Chip type:' in line:
+                # e.g., "Chip is ESP32-S3 (revision 0)" or "Chip type: ESP32-S3"
+                if 'Chip is' in line:
+                    parts = line.split('Chip is ')
+                else:
+                    parts = line.split('Chip type:')
                 if len(parts) > 1:
                     chip_name = parts[1].split()[0].lower().replace('-', '')
                     result['chip'] = chip_name
-            elif 'has no chip ID' in line.lower():
-                # ESP32-S3 and some others don't have chip ID, use MAC instead
-                has_no_chip_id = True
-            elif 'Chip ID:' in line:
-                # e.g., "Chip ID: 0x1234abcd"
-                parts = line.split('Chip ID:')
-                if len(parts) > 1:
-                    result['chip_id'] = parts[1].strip()
             elif 'MAC:' in line:
                 # e.g., "MAC: aa:bb:cc:dd:ee:ff"
                 parts = line.split('MAC:')
                 if len(parts) > 1:
                     result['mac'] = parts[1].strip()
         
-        # For chips without chip ID (ESP32-S3), use MAC as identifier
-        if has_no_chip_id and result['mac'] and not result['chip_id']:
-            result['chip_id'] = result['mac']  # Use MAC as chip_id for consistency
+        # For ESP32-S3 and others without chip ID, use MAC as identifier
+        if result['mac'] and not result['chip_id']:
+            result['chip_id'] = result['mac']
         
         if result['chip']:
             log(f"Detected chip: {result['chip']}, ID: {result.get('chip_id', 'N/A')}", 'INFO')
