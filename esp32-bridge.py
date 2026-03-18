@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "e66244e"  # GIT_HASH_MARKER
+GIT_HASH = "2bb400f"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -477,8 +477,11 @@ async def detect_chip_id(port, baudrate=115200):
         stdout, stderr = await process.communicate()
         output = stdout.decode() + stderr.decode()
         
+        # Debug: log full output
+        log(f"esptool output:\n{output}", 'INFO')
+        
         if process.returncode != 0:
-            log(f"Chip ID detection failed: {output[:200]}", 'ERROR')
+            log(f"Chip ID detection failed (code {process.returncode}): {output[:200]}", 'ERROR')
             return None
         
         # Parse output
