@@ -6,8 +6,11 @@ Network bridge for ESP32 development - serial monitor + firmware flashing over W
 
 - **Serial Monitoring** - Live streaming over WebSocket with auto-reconnect
 - **USB Hotplug Support** - Detects unplugging/replugging automatically
+- **Smart Reconnection** - Tracks devices by hardware ID, waits 30s for same device
+- **ESP32-Only Filtering** - Excludes debug consoles, Bluetooth, and non-ESP32 devices
 - **Firmware Flashing** - via esptool with progress tracking
 - **Batch Flash** - Atomic multi-file flashing in single esptool invocation
+- **Chip ID Detection** - Auto-detects connected device type and MAC
 - **HTTP Upload** - Upload .bin files via curl
 - **Baud Rate Selection** - CLI args and runtime switching
 - **Config Persistence** - YAML config file support
@@ -135,6 +138,10 @@ Connect to `wss://HOST:5678/ws`
 
 // Set chip type
 {"action": "set_chip", "chip": "esp32p4"}
+
+// Get chip ID from connected device
+{"action": "get_chip_id"}
+// Response: {"type": "chip_id", "chip_id": "80:b5:4e:f3:2d:04", "mac": "80:b5:4e:f3:2d:04", "target": "esp32s3", "status": "connected"}
 ```
 
 ### Responses
@@ -182,6 +189,26 @@ The bridge automatically:
 3. Scans for new device
 4. Reconnects when found
 
+### Smart Device Reconnection
+
+When a device disconnects:
+1. Bridge remembers device HWID (USB VID:PID:Serial)
+2. Waits 30s for same device to reconnect
+3. Shows countdown: "Waiting for device USB VID:PID=303A:1001..."
+4. After timeout, accepts any ESP32 device
+5. Updates tracking for new device
+
+### ESP32-Only Port Filtering
+
+The bridge automatically excludes:
+- Debug consoles (`/dev/cu.debug-console`)
+- Bluetooth ports (`/dev/cu.Bluetooth-Incoming-Port`)
+- Non-ESP32 USB devices
+
+Only accepts ports with:
+- ESP32 keywords in description (USB JTAG, CP210, CH340, etc.)
+- Known ESP32 vendor IDs (303A=Espressif, 10C4=Silicon Labs, 1A86=QinHeng)
+
 ### Web UI
 
 Open `https://TAILSCALE_IP:5679/` in browser:
@@ -202,7 +229,17 @@ Open `https://TAILSCALE_IP:5679/` in browser:
 
 ## Integration
 
-See [esp32-p4 skill](../esp32-p4/) for complete workflow.
+### ESP-IDF Project Builder Skill
+
+See [esp-idf-project-builder skill](../esp-idf-project-builder/) for complete workflow:
+- Device discovery and verification
+- Config-free flashing (reads addresses from build artifacts)
+- Target mismatch detection
+- High-speed flashing (3Mbps)
+
+### ESP32-P4 Skill (Legacy)
+
+See [esp32-p4 skill](../esp32-p4/) for ESP32-P4 specific workflow.
 
 ## License
 
