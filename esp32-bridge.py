@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "19886b3"  # GIT_HASH_MARKER
+GIT_HASH = "e19f5e4"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -434,9 +434,82 @@ async def flash_firmware(filepath, address, port, baudrate, chip='esp32p4'):
         STATE['flash_progress'] = 0
 
 
+async def detect_chip_id(port, baudrate=115200):
+    """Detect chip ID and info using esptool chip_id command"""
+    try:
+        cmd = [
+            'esptool',
+            '--port', port,
+            '--baud', str(baudrate),
+            'chip_id'
+        ]
+        
+        log(f"Detecting chip ID: {port}", 'INFO')
+        
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        stdout, stderr = await process.communicate()
+        output = stdout.decode() + stderr.decode()
+        
+        if process.returncode != 0:
+            log(f"Chip ID detection failed: {output[:200]}", 'ERROR')
+            return None
+        
+        # Parse output
+        result = {
+            'chip': None,
+            'chip_id': None,
+            'mac': None,
+            'status': 'connected'
+        }
+        
+        for line in output.split('\n'):
+            line = line.strip()
+            if 'Chip is' in line:
+                # e.g., "Chip is ESP32-S3 (revision 0)"
+                parts = line.split('Chip is ')
+                if len(parts) > 1:
+                    chip_name = parts[1].split()[0].lower().replace('-', '')
+                    result['chip'] = chip_name
+            elif 'Chip ID:' in line:
+                # e.g., "Chip ID: 0x1234abcd"
+                parts = line.split('Chip ID:')
+                if len(parts) > 1:
+                    result['chip_id'] = parts[1].strip()
+            elif 'MAC:' in line:
+                # e.g., "MAC: aa:bb:cc:dd:ee:ff"
+                parts = line.split('MAC:')
+                if len(parts) > 1:
+                    result['mac'] = parts[1].strip()
+        
+        if result['chip']:
+            log(f"Detected chip: {result['chip']}, ID: {result.get('chip_id', 'N/A')}", 'INFO')
+            return result
+        else:
+            return None
+            
+    except Exception as e:
+        log(f"Chip detection error: {e}", 'ERROR')
+        return None
+
+
 async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True):
     """Flash multiple files in one esptool invocation"""
     global STATE, serial_conn
+    
+    # Auto-detect chip if needed
+    if chip == 'auto' or not chip:
+        chip_info = await detect_chip_id(port, 115200)  # Use lower baud for detection
+        if chip_info and chip_info.get('chip'):
+            chip = chip_info['chip']
+            log(f"Auto-detected chip for flash: {chip}", 'FLASH')
+        else:
+            chip = STATE['chip']  # Fallback to configured default
+            log(f"Could not auto-detect chip, using default: {chip}", 'WARN')
     
     upload_dir = STATE['config']['uploads']['directory']
     start_time = time.time()
@@ -837,6 +910,31 @@ async def handle_ws(websocket):
                         'chip': STATE['chip'],
                         'supported': ['esp32', 'esp32s2', 'esp32s3', 'esp32c3', 'esp32c6', 'esp32h2', 'esp32p4']
                     }))
+                
+                elif action == 'get_chip_id':
+                    """Query actual chip ID from connected device"""
+                    if port and not port.startswith('/dev/tty'):
+                        chip_info = await detect_chip_id(port, 115200)
+                        if chip_info:
+                            await websocket.send(json.dumps({
+                                'type': 'chip_id',
+                                'chip_id': chip_info.get('chip_id'),
+                                'mac': chip_info.get('mac'),
+                                'target': chip_info.get('chip'),
+                                'status': 'connected'
+                            }))
+                        else:
+                            await websocket.send(json.dumps({
+                                'type': 'chip_id',
+                                'error': 'Failed to detect chip ID',
+                                'status': 'error'
+                            }))
+                    else:
+                        await websocket.send(json.dumps({
+                            'type': 'chip_id',
+                            'error': 'No valid port connected',
+                            'status': 'not_connected'
+                        }))
                 
                 elif action == 'set_chip':
                     new_chip = data.get('chip')
