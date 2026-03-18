@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "e19f5e4"  # GIT_HASH_MARKER
+GIT_HASH = "afa1954"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -259,33 +259,46 @@ def log(msg, level='INFO'):
     sys.stdout.flush()
 
 
-def get_esp32_port(preferred_port=None):
-    """Auto-detect ESP32 USB port with fallback"""
+def get_esp32_port(preferred_port=None, preferred_hwid=None):
+    """Auto-detect ESP32 USB port with fallback
+    
+    Args:
+        preferred_port: Preferred port device path (e.g., /dev/ttyUSB0)
+        preferred_hwid: Preferred device hardware ID (VID:PID:Serial) for matching
+    """
     ports = list(serial.tools.list_ports.comports())
     
     if not ports:
-        return None
+        return None, None
     
-    # Try preferred port first
+    # First: Try to match by hardware ID (most reliable across reconnects)
+    if preferred_hwid:
+        for port in ports:
+            # hwid format: USB VID:PID=1234:5678 SER=12345678
+            if preferred_hwid in port.hwid:
+                log(f"Matched device by HWID: {port.device}", 'INFO')
+                return port.device, port.hwid
+    
+    # Second: Try preferred port name
     if preferred_port:
         for port in ports:
             if port.device == preferred_port:
-                return port.device
+                return port.device, port.hwid
     
-    # Try ESP32 keywords
+    # Third: Try ESP32 keywords
     for keyword, name in ESP32_KEYWORDS:
         for port in ports:
             check = port.description.lower() + ' ' + port.device.lower()
             if keyword in check:
                 log(f"Found {name} on {port.device}")
-                return port.device
+                return port.device, port.hwid
     
     # Fallback to any USB port
     usb_ports = [p for p in ports if 'usb' in p.device.lower()]
     if usb_ports:
-        return usb_ports[0].device
+        return usb_ports[0].device, usb_ports[0].hwid
     
-    return ports[0].device
+    return ports[0].device, ports[0].hwid
 
 
 def reset_esp32(port, baudrate):
@@ -647,18 +660,22 @@ async def monitor_hotplug(config):
     global STATE
     
     known_ports = set()
+    known_hwids = set()
     check_interval = config['serial']['hotplug_check_interval']
     
     while True:
         await asyncio.sleep(check_interval)
         
         try:
-            current_ports = set(p.device for p in serial.tools.list_ports.comports())
+            ports = list(serial.tools.list_ports.comports())
+            current_ports = set(p.device for p in ports)
+            current_hwids = set(p.hwid for p in ports)
             
             # New port connected
             new_ports = current_ports - known_ports
-            if new_ports and not STATE['connected']:
-                log(f"New USB device detected: {new_ports}", 'HOTPLUG')
+            new_hwids = current_hwids - known_hwids
+            if (new_ports or new_hwids) and not STATE['connected']:
+                log(f"New USB device detected: {new_ports or 'same device, new port'}", 'HOTPLUG')
                 # Trigger reconnect
                 if serial_conn:
                     try:
@@ -668,8 +685,9 @@ async def monitor_hotplug(config):
             
             # Port disconnected
             gone_ports = known_ports - current_ports
-            if gone_ports and STATE['connected']:
-                log(f"USB device disconnected: {gone_ports}", 'HOTPLUG')
+            gone_hwids = known_hwids - current_hwids
+            if (gone_ports or gone_hwids) and STATE['connected']:
+                log(f"USB device disconnected: {gone_ports or 'device removed'}", 'HOTPLUG')
                 if serial_conn:
                     try:
                         serial_conn.close()
@@ -677,6 +695,7 @@ async def monitor_hotplug(config):
                         pass
             
             known_ports = current_ports
+            known_hwids = current_hwids
             
         except Exception as e:
             log(f"Hotplug monitor error: {e}", 'ERROR')
@@ -688,6 +707,7 @@ async def read_serial(config):
     
     buffer = ""
     preferred_port = config['serial']['port']
+    preferred_hwid = None  # Track device by USB hardware ID (VID:PID:Serial)
     baudrate = config['serial']['baudrate']
     timeout = config['serial']['timeout']
     reconnect_delay = config['serial']['reconnect_delay']
@@ -699,7 +719,8 @@ async def read_serial(config):
                 await asyncio.sleep(0.5)
                 continue
             
-            port = get_esp32_port(preferred_port)
+            # Try to find device by HWID first, then by port name
+            port, hwid = get_esp32_port(preferred_port, preferred_hwid)
             if not port:
                 log("No ESP32 device found", 'CONNECT')
                 await asyncio.sleep(reconnect_delay)
@@ -711,10 +732,17 @@ async def read_serial(config):
             serial_conn.rts = True
             serial_conn.dtr = True
             
+            # Update tracking info on successful connection
             STATE['connected'] = True
             STATE['port'] = port
             STATE['baudrate'] = baudrate
             STATE['reconnect_count'] = 0
+            
+            # Remember this device for reconnects
+            preferred_port = port
+            if hwid:
+                preferred_hwid = hwid
+                log(f"Device HWID: {hwid[:50]}...", 'INFO')
             
             log("Serial connected!", 'CONNECTED')
             await broadcast(json.dumps({
