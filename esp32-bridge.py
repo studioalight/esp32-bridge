@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "2930490"  # GIT_HASH_MARKER
+GIT_HASH = "e66244e"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -456,15 +456,13 @@ async def detect_chip_id(port, baudrate=115200):
         serial_conn.close()
         await asyncio.sleep(0.5)
     
-    # Reset device to ensure it's in a known state
-    reset_esp32(port, 115200)
-    await asyncio.sleep(1.0)  # Wait for boot
-    
     try:
         cmd = [
             'esptool',
             '--port', port,
             '--baud', str(baudrate),
+            '--before', 'default_reset',  # Reset before operation
+            '--after', 'no_reset',  # Don't reset after
             'chip_id'
         ]
         
