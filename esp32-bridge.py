@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "48e8ecf"  # GIT_HASH_MARKER
+GIT_HASH = "783d0fe"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -271,9 +271,17 @@ def get_esp32_port(preferred_port=None, preferred_hwid=None):
     if not ports:
         return None, None
     
+    # Filter out non-ESP32 ports (debug consoles, Bluetooth, etc.)
+    EXCLUDED_DEVICES = ['debug-console', 'bluetooth', 'bt-', 'wlan', 'wifi']
+    valid_ports = [p for p in ports if not any(excl in p.device.lower() for excl in EXCLUDED_DEVICES)]
+    
+    if not valid_ports:
+        log("No valid USB ports found (all excluded)", 'WARN')
+        return None, None
+    
     # First: Try to match by hardware ID (most reliable across reconnects)
     if preferred_hwid:
-        for port in ports:
+        for port in valid_ports:
             # hwid format: USB VID:PID=1234:5678 SER=12345678
             if preferred_hwid in port.hwid:
                 log(f"Matched device by HWID: {port.device}", 'INFO')
@@ -281,24 +289,27 @@ def get_esp32_port(preferred_port=None, preferred_hwid=None):
     
     # Second: Try preferred port name
     if preferred_port:
-        for port in ports:
+        for port in valid_ports:
             if port.device == preferred_port:
                 return port.device, port.hwid
     
     # Third: Try ESP32 keywords
     for keyword, name in ESP32_KEYWORDS:
-        for port in ports:
+        for port in valid_ports:
             check = port.description.lower() + ' ' + port.device.lower()
             if keyword in check:
                 log(f"Found {name} on {port.device}")
                 return port.device, port.hwid
     
-    # Fallback to any USB port
-    usb_ports = [p for p in ports if 'usb' in p.device.lower()]
+    # Fallback to any valid USB port (not debug console)
+    usb_ports = [p for p in valid_ports if 'usb' in p.device.lower() or 'tty' in p.device.lower()]
     if usb_ports:
+        log(f"Fallback to USB port: {usb_ports[0].device}", 'INFO')
         return usb_ports[0].device, usb_ports[0].hwid
     
-    return ports[0].device, ports[0].hwid
+    # Last resort: first valid port
+    log(f"Fallback to first valid port: {valid_ports[0].device}", 'INFO')
+    return valid_ports[0].device, valid_ports[0].hwid
 
 
 def reset_esp32(port, baudrate):
