@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "8668ba4"  # GIT_HASH_MARKER
+GIT_HASH = "d417910"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -306,15 +306,26 @@ def get_esp32_port(preferred_port=None, preferred_hwid=None, strict_hwid=False):
                 log(f"Found {name} on {port.device}")
                 return port.device, port.hwid
     
-    # Fallback to any valid USB port (not debug console)
-    usb_ports = [p for p in valid_ports if 'usb' in p.device.lower() or 'tty' in p.device.lower()]
-    if usb_ports:
-        log(f"Fallback to USB port: {usb_ports[0].device}", 'INFO')
-        return usb_ports[0].device, usb_ports[0].hwid
+    # Fallback: only accept ports that look like ESP32 devices
+    # Must have ESP32 keywords in description or be a known ESP32 USB VID
+    ESP32_VIDS = ['303A', '10C4', '1A86']  # Espressif, Silicon Labs, QinHeng
+    esp32_ports = []
+    for port in valid_ports:
+        check = port.description.lower() + ' ' + port.hwid.lower()
+        # Check for ESP32 keywords
+        if any(kw[0] in check for kw in ESP32_KEYWORDS):
+            esp32_ports.append(port)
+        # Check for known ESP32 vendor IDs
+        elif any(vid in port.hwid for vid in ESP32_VIDS):
+            esp32_ports.append(port)
     
-    # Last resort: first valid port
-    log(f"Fallback to first valid port: {valid_ports[0].device}", 'INFO')
-    return valid_ports[0].device, valid_ports[0].hwid
+    if esp32_ports:
+        log(f"Fallback to ESP32 port: {esp32_ports[0].device}", 'INFO')
+        return esp32_ports[0].device, esp32_ports[0].hwid
+    
+    # No ESP32 device found
+    log("No ESP32 device found", 'WARN')
+    return None, None
 
 
 def reset_esp32(port, baudrate):
