@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "cab01ce"  # GIT_HASH_MARKER
+GIT_HASH = "52c476b"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -489,7 +489,7 @@ async def detect_chip_id(port, baudrate=115200):
             '--port', port,
             '--baud', str(baudrate),
             '--before', 'default-reset',
-            '--after', 'no-reset',
+            '--after', 'hard_reset',  # Reset back to app mode after detection
             'chip-id'
         ]
         
