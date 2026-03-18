@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "ae9bd05"  # GIT_HASH_MARKER
+GIT_HASH = "8668ba4"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -729,6 +729,7 @@ async def read_serial(config):
     buffer = ""
     preferred_port = config['serial']['port']
     preferred_hwid = None  # Track device by USB hardware ID (VID:PID:Serial)
+    hwid_wait_start = None  # Track when we started waiting for specific device
     baudrate = config['serial']['baudrate']
     timeout = config['serial']['timeout']
     reconnect_delay = config['serial']['reconnect_delay']
@@ -746,12 +747,24 @@ async def read_serial(config):
             port, hwid = get_esp32_port(preferred_port, preferred_hwid, strict_hwid=strict_mode)
             if not port:
                 if strict_mode:
-                    log(f"Waiting for device {preferred_hwid[:30]}... to reconnect", 'RECONNECT')
+                    if hwid_wait_start is None:
+                        hwid_wait_start = asyncio.get_event_loop().time()
+                    elapsed = asyncio.get_event_loop().time() - hwid_wait_start
+                    if elapsed > 30:  # After 30s, accept any ESP32 device
+                        log(f"Timeout waiting for {preferred_hwid[:30]}..., accepting any device", 'RECONNECT')
+                        preferred_hwid = None  # Clear to accept any device
+                        hwid_wait_start = None
+                    else:
+                        log(f"Waiting for device {preferred_hwid[:30]}... to reconnect ({int(30-elapsed)}s)", 'RECONNECT')
                 else:
                     log("No ESP32 device found", 'CONNECT')
+                    hwid_wait_start = None
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 1.5, max_reconnect_delay)
                 continue
+            
+            # Found a device, reset wait timer
+            hwid_wait_start = None
             
             log(f"Opening {port} @ {baudrate}...", 'CONNECT')
             serial_conn = serial.Serial(port, baudrate, timeout=timeout)
