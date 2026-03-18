@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "6846c07"  # GIT_HASH_MARKER
+GIT_HASH = "c7e33d8"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -449,6 +449,13 @@ async def flash_firmware(filepath, address, port, baudrate, chip='esp32p4'):
 
 async def detect_chip_id(port, baudrate=115200):
     """Detect chip ID and info using esptool chip_id command"""
+    global serial_conn
+    
+    # Close serial connection before running esptool
+    if serial_conn and serial_conn.is_open:
+        serial_conn.close()
+        await asyncio.sleep(0.5)
+    
     try:
         cmd = [
             'esptool',
