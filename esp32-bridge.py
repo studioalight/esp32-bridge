@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "6c4a37a"  # GIT_HASH_MARKER
+GIT_HASH = "792a07a"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -641,11 +641,16 @@ async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True):
                 
                 # Parse progress
                 if '%' in text:
-                    # Extract percentage from e.g. "Writing at 0x00010000... (73 %)"
+                    # Extract percentage from e.g. "Writing at 0x00010000 [ ] 73.0% ..."
                     pct = 0
                     try:
-                        pct_str = text.split('%')[0].split('(')[-1].strip()
-                        pct = int(pct_str)
+                        # Find the percentage number before '%'
+                        pct_part = text.split('%')[0].strip()
+                        # Get the last number (handles "73.0" or "(73" etc)
+                        import re
+                        match = re.search(r'(\d+(?:\.\d+)?)', pct_part)
+                        if match:
+                            pct = int(float(match.group(1)))
                     except:
                         pass
                     await broadcast(json.dumps({
