@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "ba3702d"  # GIT_HASH_MARKER
+GIT_HASH = "4aa782b"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -641,15 +641,31 @@ async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True):
                 
                 # Parse progress
                 if '%' in text:
+                    # Extract percentage from e.g. "Writing at 0x00010000... (73 %)"
+                    pct = 0
+                    try:
+                        pct_str = text.split('%')[0].split('(')[-1].strip()
+                        pct = int(pct_str)
+                    except:
+                        pass
                     await broadcast(json.dumps({
                         'type': 'flash_batch', 'status': 'progress',
+                        'pct': pct,
                         'line': text
                     }))
                 elif 'Writing' in text or 'Compressed' in text:
                     current_file += 1
+                    # Get filename from files array (esptool processes in order)
+                    file_idx = current_file - 1
+                    if file_idx < len(files):
+                        file_name = files[file_idx].get('file') or files[file_idx].get('filename', f'file_{current_file}')
+                    else:
+                        file_name = f'file_{current_file}'
+                    
                     await broadcast(json.dumps({
                         'type': 'flash_batch', 'status': 'file_start',
-                        'file_num': current_file, 'total': len(files)
+                        'file_num': current_file, 'total': len(files),
+                        'file': file_name
                     }))
                 elif 'Hash verified' in text or 'hash verified' in text:
                     await broadcast(json.dumps({
