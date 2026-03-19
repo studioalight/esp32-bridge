@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "8075210"  # GIT_HASH_MARKER
+GIT_HASH = "ba3702d"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -355,14 +355,25 @@ def enter_bootloader(port, baudrate):
     try:
         log(f"Entering bootloader on {port}...", 'BOOT')
         with serial.Serial(port, 115200, timeout=1) as ser:
-            # ESP32 enters bootloader when BOOT=LOW at reset release
-            # DTR/RTS polarity: DTR=LOW → BOOT=HIGH, DTR=HIGH → BOOT=LOW
-            ser.dtr = True     # BOOT = LOW (enter bootloader on reset release)
-            ser.rts = True     # RESET = LOW (assert reset)
+            # ESP32 enters bootloader when BOOT(IO0)=LOW at reset release
+            # USB bridges invert: ser.dtr=True -> IO0 LOW, ser.rts=False -> EN LOW
+            
+            # Step 1: Set BOOT=LOW (dtr=True), keep EN=HIGH (rts=True)
+            ser.dtr = True   # IO0 = LOW (boot mode)
+            ser.rts = True   # EN = HIGH (running)
+            time.sleep(0.05)
+            
+            # Step 2: Assert reset while BOOT is still LOW
+            ser.rts = False  # EN = LOW (reset asserted)
             time.sleep(0.1)
-            ser.rts = False    # RESET = HIGH (release reset while BOOT is LOW)
-            time.sleep(0.5)    # Give bootloader time to start
-            ser.dtr = False    # BOOT = HIGH (release, allows UART comms)
+            
+            # Step 3: Release reset while BOOT still LOW -> enters bootloader
+            ser.rts = True   # EN = HIGH (reset released)
+            time.sleep(0.5)  # Wait for bootloader
+            
+            # Step 4: Release BOOT (set IO0 back to HIGH)
+            ser.dtr = False  # IO0 = HIGH (normal)
+            
         log("Bootloader mode active", 'BOOT')
         return True
     except Exception as e:
