@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "75d2049"  # GIT_HASH_MARKER
+GIT_HASH = "8075210"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -334,14 +334,14 @@ def reset_esp32(port, baudrate):
         log(f"Resetting ESP32 on {port}...", 'RESET')
         # Use 115200 for reset - higher baud can cause issues
         with serial.Serial(port, 115200, timeout=1) as ser:
-            ser.dtr = True
-            ser.rts = False
+            # Make sure BOOT is HIGH (dtr=False) BEFORE touching reset
+            # If BOOT is LOW when reset releases, ESP enters bootloader mode
+            ser.dtr = False  # IO0/BOOT = HIGH (not bootloader)
+            ser.rts = False  # EN = HIGH (running)
             time.sleep(0.05)
-            ser.rts = True
-            time.sleep(0.05)
-            # ESP32 needs DTR=False after reset to exit bootloader
-            ser.dtr = False
-            ser.rts = False
+            ser.rts = True   # EN = LOW (assert reset)
+            time.sleep(0.1)  # Hold reset longer for stability
+            ser.rts = False  # EN = HIGH (release reset) - BOOT is already HIGH
             time.sleep(0.05)
         log("Reset complete", 'RESET')
         return True
@@ -355,14 +355,14 @@ def enter_bootloader(port, baudrate):
     try:
         log(f"Entering bootloader on {port}...", 'BOOT')
         with serial.Serial(port, 115200, timeout=1) as ser:
-            ser.dtr = False
-            ser.rts = True
+            # ESP32 enters bootloader when BOOT=LOW at reset release
+            # DTR/RTS polarity: DTR=LOW → BOOT=HIGH, DTR=HIGH → BOOT=LOW
+            ser.dtr = True     # BOOT = LOW (enter bootloader on reset release)
+            ser.rts = True     # RESET = LOW (assert reset)
             time.sleep(0.1)
-            ser.rts = False
-            time.sleep(0.1)
-            ser.rts = True
-            time.sleep(0.5)
-            ser.dtr = True
+            ser.rts = False    # RESET = HIGH (release reset while BOOT is LOW)
+            time.sleep(0.5)    # Give bootloader time to start
+            ser.dtr = False    # BOOT = HIGH (release, allows UART comms)
         log("Bootloader mode active", 'BOOT')
         return True
     except Exception as e:
