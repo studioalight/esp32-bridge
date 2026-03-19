@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "792a07a"  # GIT_HASH_MARKER
+GIT_HASH = "d854213"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -629,59 +629,99 @@ async def flash_batch(files, port, baudrate, chip='esp32p4', reset_after=True):
         )
         
         current_file = 0
+        buffer = b''
+        current_line = ''
         
         while True:
-            line = await process.stdout.readline()
-            if not line:
+            chunk = await process.stdout.read(1024)
+            if not chunk:
                 break
             
-            text = line.decode().strip()
-            if text:
-                log(f"[esptool] {text[:120]}")
+            buffer += chunk
+            
+            # Process complete lines (split on \n or \r)
+            while True:
+                # Find next newline or carriage return
+                nl_pos = buffer.find(b'\n')
+                cr_pos = buffer.find(b'\r')
                 
-                # Parse progress
-                if '%' in text:
-                    # Extract percentage from e.g. "Writing at 0x00010000 [ ] 73.0% ..."
-                    pct = 0
-                    try:
-                        # Find the percentage number before '%'
-                        pct_part = text.split('%')[0].strip()
-                        # Get the last number (handles "73.0" or "(73" etc)
-                        import re
-                        match = re.search(r'(\d+(?:\.\d+)?)', pct_part)
-                        if match:
-                            pct = int(float(match.group(1)))
-                    except:
-                        pass
-                    await broadcast(json.dumps({
-                        'type': 'flash_batch', 'status': 'progress',
-                        'pct': pct,
-                        'line': text
-                    }))
-                elif 'Writing' in text or 'Compressed' in text:
-                    current_file += 1
-                    # Get filename from files array (esptool processes in order)
-                    file_idx = current_file - 1
-                    if file_idx < len(files):
-                        file_name = files[file_idx].get('file') or files[file_idx].get('filename', f'file_{current_file}')
-                    else:
-                        file_name = f'file_{current_file}'
+                if nl_pos == -1 and cr_pos == -1:
+                    break  # No complete line yet
+                
+                # Determine which comes first
+                if nl_pos != -1 and (cr_pos == -1 or nl_pos < cr_pos):
+                    # Newline - complete the current line
+                    current_line += buffer[:nl_pos].decode('utf-8', errors='replace')
+                    buffer = buffer[nl_pos + 1:]
                     
-                    await broadcast(json.dumps({
-                        'type': 'flash_batch', 'status': 'file_start',
-                        'file_num': current_file, 'total': len(files),
-                        'file': file_name
-                    }))
-                elif 'Hash verified' in text or 'hash verified' in text:
-                    await broadcast(json.dumps({
-                        'type': 'flash_batch', 'status': 'file_complete',
-                        'file_num': current_file
-                    }))
-                else:
-                    await broadcast(json.dumps({
-                        'type': 'flash_batch', 'status': 'output',
-                        'line': text
-                    }))
+                    text = current_line.strip()
+                    current_line = ''  # Reset for next line
+                    
+                    if text:
+                        log(f"[esptool] {text[:120]}")
+                        
+                        # Parse progress
+                        if '%' in text:
+                            pct = 0
+                            try:
+                                pct_part = text.split('%')[0].strip()
+                                import re
+                                match = re.search(r'(\d+(?:\.\d+)?)', pct_part)
+                                if match:
+                                    pct = int(float(match.group(1)))
+                            except:
+                                pass
+                            await broadcast(json.dumps({
+                                'type': 'flash_batch', 'status': 'progress',
+                                'pct': pct,
+                                'line': text
+                            }))
+                        elif 'Writing' in text or 'Compressed' in text:
+                            current_file += 1
+                            file_idx = current_file - 1
+                            if file_idx < len(files):
+                                file_name = files[file_idx].get('file') or files[file_idx].get('filename', f'file_{current_file}')
+                            else:
+                                file_name = f'file_{current_file}'
+                            
+                            await broadcast(json.dumps({
+                                'type': 'flash_batch', 'status': 'file_start',
+                                'file_num': current_file, 'total': len(files),
+                                'file': file_name
+                            }))
+                        elif 'Hash verified' in text or 'hash verified' in text:
+                            await broadcast(json.dumps({
+                                'type': 'flash_batch', 'status': 'file_complete',
+                                'file_num': current_file
+                            }))
+                        else:
+                            await broadcast(json.dumps({
+                                'type': 'flash_batch', 'status': 'output',
+                                'line': text
+                            }))
+                
+                elif cr_pos != -1:
+                    # Carriage return - update current line (progress indicator)
+                    current_line = buffer[:cr_pos].decode('utf-8', errors='replace')
+                    buffer = buffer[cr_pos + 1:]
+                    
+                    # Check if this is a progress line and broadcast immediately
+                    text = current_line.strip()
+                    if text and '%' in text:
+                        pct = 0
+                        try:
+                            pct_part = text.split('%')[0].strip()
+                            import re
+                            match = re.search(r'(\d+(?:\.\d+)?)', pct_part)
+                            if match:
+                                pct = int(float(match.group(1)))
+                        except:
+                            pass
+                        await broadcast(json.dumps({
+                            'type': 'flash_batch', 'status': 'progress',
+                            'pct': pct,
+                            'line': text
+                        }))
         
         returncode = await process.wait()
         
