@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "34dde51"  # GIT_HASH_MARKER
+GIT_HASH = "c614b45"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -901,8 +901,26 @@ async def handle_ws(websocket):
                 
                 if action == 'reset':
                     if port:
-                        reset_esp32(port, baudrate)
-                        await websocket.send(json.dumps({'type': 'system', 'message': 'Reset triggered'}))
+                        # Use existing serial connection if available, otherwise open new
+                        if serial_conn and serial_conn.is_open:
+                            log("Resetting via existing serial connection...", 'RESET')
+                            try:
+                                # Ensure BOOT is HIGH (not bootloader mode)
+                                serial_conn.dtr = False  # IO0/BOOT = HIGH
+                                serial_conn.rts = True   # EN = LOW (assert reset)
+                                await asyncio.sleep(0.1)
+                                serial_conn.rts = False  # EN = HIGH (release reset)
+                                await asyncio.sleep(0.05)
+                                log("Reset complete", 'RESET')
+                                await websocket.send(json.dumps({'type': 'system', 'message': 'Reset triggered via active connection'}))
+                            except Exception as e:
+                                log(f"Reset via active connection failed: {e}", 'ERROR')
+                                # Fallback to traditional reset
+                                reset_esp32(port, baudrate)
+                                await websocket.send(json.dumps({'type': 'system', 'message': 'Reset triggered (fallback)'}))
+                        else:
+                            reset_esp32(port, baudrate)
+                            await websocket.send(json.dumps({'type': 'system', 'message': 'Reset triggered'}))
                     else:
                         await websocket.send(json.dumps({'type': 'error', 'message': 'No port'}))
                 
