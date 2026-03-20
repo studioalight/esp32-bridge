@@ -44,7 +44,7 @@ Requires:
 """
 
 # Git commit hash - auto-updated by pre-commit hook
-GIT_HASH = "c614b45"  # GIT_HASH_MARKER
+GIT_HASH = "88cceef"  # GIT_HASH_MARKER
 
 import asyncio
 import serial
@@ -845,8 +845,9 @@ async def read_serial(config):
                                 STATE['bytes_received'] += len(line)
                                 STATE['last_activity'] = time.time()
                                 if STATE['echo']:
-                                    print(f'[SERIAL] {line}', flush=True)
-                                await broadcast(json.dumps({'type': 'serial', 'text': line}))
+                                    ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                                    print(f'[{ts}] {line}', flush=True)
+                                await broadcast(json.dumps({'type': 'serial', 'text': line, 'timestamp': datetime.now().isoformat(timespec='milliseconds')}))
                     
                     await asyncio.sleep(0.01)
                     
